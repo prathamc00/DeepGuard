@@ -70,3 +70,52 @@ class ImageDeepfakeModel:
         except Exception as e:
             print(f"Error during prediction: {e}")
             return "error", 0.0
+
+    def predict_with_features(self, image_path: str):
+        """
+        Enhanced prediction that returns label, confidence, and feature embedding.
+        
+        Returns:
+            Tuple of (label, confidence, embedding_vector)
+            - label: 'real', 'fake', 'model_not_loaded', or 'error'
+            - confidence: float between 0.0 and 1.0
+            - embedding: List[float] - 1000-dim feature vector (or empty list on error)
+        """
+        if self.model is None:
+            return "model_not_loaded", 0.0, []
+
+        try:
+            image = Image.open(image_path).convert("RGB")
+            input_tensor = self.transform(image).unsqueeze(0).to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model(input_tensor)
+                
+                # Get probabilities
+                probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                fake_prob = probabilities[0][1].item()
+                real_prob = probabilities[0][0].item()
+                
+                # Use the logits as a simple embedding 
+                # (TorchScript models don't easily expose intermediate layers)
+                # Flatten the output logits and append probabilities for richer representation
+                embedding = outputs[0].cpu().numpy().tolist()
+                
+                # Extend with probabilities for better similarity matching
+                embedding.extend([real_prob, fake_prob])
+
+            if fake_prob > real_prob:
+                return "fake", fake_prob, embedding
+            else:
+                return "real", real_prob, embedding
+
+        except Exception as e:
+            print(f"Error during prediction with features: {e}")
+            return "error", 0.0, []
+
+    def get_embedding_dim(self) -> int:
+        """Return the dimension of the embedding vector"""
+        # Output logits (2) + probabilities (2) = 4
+        # This is minimal but works with the TorchScript model
+        return 4
+

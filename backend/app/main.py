@@ -4,6 +4,7 @@ from app.config import get_settings
 from app.api.health import router as health_router
 from app.api.upload import router as upload_router
 from app.api.status import router as status_router
+from app.api.rag_detection import router as rag_router
 
 settings = get_settings()
 
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(upload_router)
 app.include_router(status_router)
+app.include_router(rag_router)
 
 @app.get("/")
 def root():

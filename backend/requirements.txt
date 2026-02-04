@@ -37,3 +37,10 @@ grad-cam
 
 pytest
 httpx
+
+# RAG System
+chromadb
+sentence-transformers
+
+# Forensic Analysis
+scipy
