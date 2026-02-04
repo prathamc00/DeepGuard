@@ -1,21 +1,72 @@
 import torch
-from transformers import pipeline
+import torchvision.transforms as transforms
+from PIL import Image
+from pathlib import Path
+import os
 
 class ImageDeepfakeModel:
     def __init__(self):
-        device = 0 if torch.cuda.is_available() else -1
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Path to the local model
+        # backend/app/models/image_model.py -> ... -> DeepGuard/ml/checkpoints
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parents[3] 
+        self.model_path = project_root / "ml" / "checkpoints" / "deepfake_detector_scripted.pt"
+        
+        self.model = None
+        self._load_model()
 
-        self.detector = pipeline(
-            task="image-classification",
-            model="prithivMLmods/Deep-Fake-Detector-v2-Model",
-            device=device
-        )
+        # Transforms used during validation/inference (same as training)
+        self.transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    def _load_model(self):
+        if self.model_path.exists():
+            try:
+                print(f"Loading local model from {self.model_path}...")
+                self.model = torch.jit.load(str(self.model_path), map_location=self.device)
+                self.model.eval()
+                print("Local model loaded successfully.")
+            except Exception as e:
+                print(f"Error loading local model: {e}")
+                self.model = None
+        else:
+            print(f"Local model not found at {self.model_path}")
+            self.model = None
 
     def predict(self, image_path: str):
-        results = self.detector(image_path)
+        if self.model is None:
+            # Fallback or error if model isn't loaded
+            # For now, let's return a dummy or raise error. 
+            # Given the requirement is to use the trained model, we should probably fail if it's missing.
+            # But to be safe, we can return "Error" or similar.
+            return "model_not_loaded", 0.0
 
-        top = results[0]
-        label = top["label"].lower()
-        confidence = float(top["score"])
+        try:
+            image = Image.open(image_path).convert("RGB")
+            input_tensor = self.transform(image).unsqueeze(0).to(self.device)
 
-        return label, confidence
+            with torch.no_grad():
+                outputs = self.model(input_tensor)
+                # Assuming output involves logits. We appy softmax/sigmoid depending on training.
+                # In the notebook, it was a binary classification (Real vs Fake).
+                # Usually: 0=Real, 1=Fake or vice versa.
+                # Let's check the notebook for class mapping...
+                # Notebook says: Real: 0, Fake: 1
+                
+                probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                fake_prob = probabilities[0][1].item()
+                real_prob = probabilities[0][0].item()
+
+            if fake_prob > real_prob:
+                return "fake", fake_prob
+            else:
+                return "real", real_prob
+
+        except Exception as e:
+            print(f"Error during prediction: {e}")
+            return "error", 0.0

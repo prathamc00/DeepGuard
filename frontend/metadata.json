@@ -1,0 +1,8 @@
+
+{
+  "name": "DeepGuard - Deepfake Detection Lab",
+  "description": "A state-of-the-art forensic tool for identifying AI-generated media using advanced vision reasoning. Analyze images and videos for manipulation artifacts.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
